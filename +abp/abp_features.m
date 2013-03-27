@@ -2,6 +2,7 @@ function [m, s, c] = abp_features(file)
 % ABP_FEATURES - Mean and stdev of ABP features across conditions
 %
 % [m, s, c] = abp_features(file);
+% abp_features(files);
 %
 % Where
 %
@@ -25,6 +26,10 @@ function [m, s, c] = abp_features(file)
 %           8: Heart rate
 %           9: Liljestrand and Zander's cardiac output estimate
 %
+% If no output arguments are provided, then abp_features will generate a
+% .csv file with the same name as the input file that contains the computed
+% ABP features.
+%
 % See also: cardiac_output
 
 import io.edfplus.read;
@@ -38,10 +43,15 @@ NB_COND = 5;
 
 [hdr, dat] = read(file, 'verbose', false);
 
+bpIdx = find(ismember(hdr.channel_type, 'BP'));
+if numel(bpIdx) ~= 1,
+    error('There must be exactly one BP signal: %d found', numel(bpIdx));
+end
+
 % Must use 100 Hz for James Sun's functions
-abp = resample(dat(1,:)', 100, hdr.sr(1));
-ann = resample(dat(2,:)', 100, hdr.sr(1));
-ann = medfilt1(ann, 3);
+abp = resample(dat(bpIdx,:)', 125, hdr.sr(1));
+ann = resample(dat(end,:)', 125, hdr.sr(1));
+ann = medfilt1(ann, 20);
 
 % Determine onsets of each experimental condition
 % This is very fragile. Try something smarter? 
@@ -96,5 +106,3 @@ end
 % First and last are always condition 0
 c(1) = 0;
 c(end) = 0;
-
-end
