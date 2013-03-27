@@ -1,4 +1,4 @@
-function [m, s, c] = abp_features(file)
+function [m, s, c] = abp_features(varargin)
 % ABP_FEATURES - Mean and stdev of ABP features across conditions
 %
 % [m, s, c] = abp_features(file);
@@ -27,19 +27,39 @@ function [m, s, c] = abp_features(file)
 %           9: Liljestrand and Zander's cardiac output estimate
 %
 % If no output arguments are provided, then abp_features will generate a
-% .csv file with the same name as the input file that contains the computed
-% ABP features.
+% .csv file (abp_features_XXXXXX.csv) that contains the computed ABP
+% features.
 %
 % See also: cardiac_output
 
 import io.edfplus.read;
 import cardiac_output.*;
+import datahash.DataHash;
+import abp.abp_features;
 
 STD_PSYS  = 120;
 STD_PDIAS = 80;
 MIN_COND_DUR = 5000; % In samples
 DISCARD = 1000;     % Samples to discard from the annotations
 NB_COND = 5;
+
+if nargin > 1,
+    m = cell(1, nargin);
+    s = cell(1, nargin);
+    c = cell(1, nargin);
+    for i = 1:nargin
+        [thisM, thisS, thisC] = abp_features(varargin{i});
+        m{i} = thisM; 
+        s{i} = thisS;
+        c{i} = thisC;
+    end
+    if nargout < 1,
+        save2file(varargin, m,s,c);
+    end
+    return;
+end
+
+file = varargin{1};
 
 [hdr, dat] = read(file, 'verbose', false);
 
@@ -104,5 +124,53 @@ for i = 1:nCond
 end
 
 % First and last are always condition 0
-c(1) = 0;
+c(1)   = 0;
 c(end) = 0;
+
+if nargout < 1,
+    save2file({file}, {m}, {s}, {c});
+end
+
+end
+
+
+function save2file(file, m, s, c)
+import datahash.DataHash;
+import safefid.safefid;
+import somsds.parse_filename;
+import mperl.join;
+
+filesHash = DataHash(file);
+fName = ['abp_features_' filesHash(1:6) '.csv'];
+
+fid = safefid.fopen(fName, 'w');
+
+% print file header
+tags = parse_filename(file{1});
+tagNames = fieldnames(tags);
+tags = join(',', tagNames);
+fprintf(fid, '%s,counter,%s,%s,%s,%s,%s,%s,%s,%s\n', tags, ...
+    'DiastolicBP',       ...
+    'PulsePressure',     ...
+    'MeanPressure',      ...
+    'MeanDyneg',         ...
+    'AreaUnderSystole1', ...
+    'AreaUnderSystole2', ...
+    'HeartRate',         ...
+    'CO');
+
+% Print features to file
+for i = 1:numel(file)
+    
+    tags = parse_filename(file{1});
+    tagVals = cellfun(@(x) tags.(x), tagNames, 'UniformOutput', false);
+    tagVals = cellfun(@(x) join(',', x), tagVals, 'UniformOutput', false);
+    for k = 1:size(m{i}, 1)
+        fprintf(fid, '%s,%d,%s,%s\n', join(',', tagVals), c{i}(k), ...
+            join(',', m{i}(k,:)), ...
+            join(',', s{i}(k,:)));
+    end
+    
+end
+
+end
